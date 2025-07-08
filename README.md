@@ -2,6 +2,8 @@
 
 GitHubのプライベートリポジトリからIssuesを取得し、ローカルのMarkdownファイルとして同期するCLIツールです。
 
+> 🤖 このツールは[Claude Code](https://claude.ai/code)を使用して開発されました。
+
 ## 特徴
 
 - 🔄 GitHubリポジトリからIssuesを自動同期
@@ -18,7 +20,7 @@ GitHubのプライベートリポジトリからIssuesを取得し、ローカ�
 ## インストール
 
 ```bash
-git clone <this-repository>
+git clone https://github.com/zaki4ma/github-issues-sync.git
 cd github-issues-sync
 npm install
 ```
@@ -57,6 +59,10 @@ repositories:
   - owner: "your-username"
     repo: "your-project"
     output_dir: "./docs/issues"
+    display_name: "Your Project"
+    filters:
+      states: ["open"]
+      labels: []
 ```
 
 ### 4. 同期実行
@@ -113,18 +119,18 @@ github:
 
 # 複数リポジトリの設定
 repositories:
-  - owner: "zaki4ma"
-    repo: "timeinvest-app"
-    output_dir: "../timeinvest-app/docs/issues"
-    display_name: "Time Investment App"
+  - owner: "your-username"
+    repo: "project-alpha"
+    output_dir: "../project-alpha/docs/issues"
+    display_name: "Project Alpha"
     filters:
       states: ["open"]
       labels: []
   
-  - owner: "zaki4ma"
-    repo: "priloa"
-    output_dir: "../priloa/docs/issues"
-    display_name: "Priloa Project"
+  - owner: "your-username"
+    repo: "project-beta"
+    output_dir: "../project-beta/docs/issues"
+    display_name: "Project Beta"
 
 # グローバルフィルター
 filters:
