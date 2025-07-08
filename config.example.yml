@@ -1,0 +1,88 @@
+# GitHub Issues Sync Configuration
+
+github:
+  # GitHub Personal Access Token (can use environment variable)
+  token: "${GITHUB_TOKEN}"
+
+# List of repositories to sync
+repositories:
+  - owner: "your-username"
+    repo: "project-a"
+    output_dir: "./docs/issues/project-a"
+    # Optional: Repository display name
+    display_name: "Project A"
+    # Optional: Override global filters for this repo
+    filters:
+      states: ["open"]
+      labels: ["bug", "enhancement"]
+  
+  - owner: "your-org"
+    repo: "project-b"
+    output_dir: "./docs/issues/project-b"
+    display_name: "Project B (Org)"
+    
+  - owner: "your-username"
+    repo: "project-c"
+    output_dir: "./docs/issues/project-c"
+    # Repository can be disabled without removing from config
+    enabled: false
+
+# Repository groups for batch operations
+repository_groups:
+  personal:
+    - "your-username/project-a"
+    - "your-username/project-c"
+  work:
+    - "your-org/project-b"
+
+# Global filters (applied to all repositories unless overridden)
+filters:
+  states: ["open"]  # Options: open, closed, all
+  labels: []        # Empty means all labels
+  # Advanced label filtering
+  label_mode: "any"  # Options: any, all, none
+  exclude_labels: [] # Labels to exclude
+  
+  assignee: null    # null means all assignees, "none" for unassigned
+  creator: null     # Filter by issue creator
+  mentioned: null   # Filter by mentioned user
+  
+  # Date filtering (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
+  since: null       # Issues updated after this date
+  until: null       # Issues updated before this date
+  
+  sort: "updated"   # Options: created, updated, comments
+  direction: "desc" # Options: asc, desc
+  
+  # Custom search query (GitHub search syntax)
+  query: null       # e.g., "is:issue label:bug in:title"
+
+# Template configuration
+templates:
+  issue: "./templates/issue.md"
+  enhanced_issue: "./templates/issue-enhanced.md"
+  index: "./templates/index.md"
+
+# Output settings
+output:
+  # Clean output directory before sync
+  clean_before_sync: false
+  # Create index file
+  create_index: true
+  # Group issues by state
+  group_by_state: true
+  # Create master index file combining all repositories
+  create_master_index: true
+  # Master index file path
+  master_index_path: "./docs/README.md"
+  # Use enhanced template for complex issues
+  use_enhanced_template: true
+
+# Performance settings
+performance:
+  # Number of repositories to process in parallel
+  concurrent_repos: 3
+  # Number of API requests to process in parallel per repository
+  concurrent_requests: 2
+  # Rate limiting delay between requests (milliseconds)
+  rate_limit_delay: 100
