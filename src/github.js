@@ -1,12 +1,12 @@
-import { Octokit } from "@octokit/rest";
-import chalk from "chalk";
-import { CacheManager } from "./cache.js";
-import { ErrorHandler } from "./errorHandler.js";
+import { Octokit } from '@octokit/rest';
+import chalk from 'chalk';
+import { CacheManager } from './cache.js';
+import { ErrorHandler } from './errorHandler.js';
 
 export class GitHubClient {
   constructor(token, options = {}) {
     if (!token) {
-      throw new Error("GitHub token is required");
+      throw new Error('GitHub token is required');
     }
     
     this.octokit = new Octokit({
@@ -314,6 +314,102 @@ export class GitHubClient {
     
     return await this.errorHandler.safeExecute(
       () => this.getIssues(owner, repo, options),
+      context,
+      [] // fallback to empty array if all retries fail
+    );
+  }
+
+  async getIssueComments(owner, repo, issueNumber, options = {}) {
+    const {
+      sort = 'created',
+      direction = 'asc',
+      since = null,
+      per_page = 100
+    } = options;
+
+    try {
+      console.log(chalk.blue(`Fetching comments for issue #${issueNumber} from ${owner}/${repo}...`));
+      
+      // Check cache first
+      const cacheKey = await this.cache.generateCacheKey('comments', { 
+        owner, repo, issueNumber, options 
+      });
+      if (this.useCache) {
+        const cachedComments = this.cache.get(cacheKey);
+        if (cachedComments) {
+          console.log(chalk.gray(`✓ Found ${cachedComments.length} comments (cached)`));
+          return cachedComments;
+        }
+      }
+      
+      await this.respectRateLimit();
+      
+      const params = {
+        owner,
+        repo,
+        issue_number: issueNumber,
+        sort,
+        direction,
+        per_page
+      };
+
+      if (since) {
+        params.since = since;
+      }
+
+      const response = await this.octokit.rest.issues.listComments(params);
+      const comments = response.data;
+      
+      // Cache the results
+      if (this.useCache) {
+        this.cache.set(cacheKey, comments);
+      }
+      
+      console.log(chalk.green(`✓ Found ${comments.length} comments for issue #${issueNumber}`));
+      return comments;
+    } catch (error) {
+      const context = { operation: 'getIssueComments', owner, repo, issueNumber, options };
+      
+      if (this.errorHandler.isRetryableError(error)) {
+        throw error;
+      } else {
+        await this.errorHandler.handleApiError(error, context);
+      }
+    }
+  }
+
+  async createIssueComment(owner, repo, issueNumber, body) {
+    try {
+      console.log(chalk.blue(`Creating comment on issue #${issueNumber} in ${owner}/${repo}...`));
+      
+      await this.respectRateLimit();
+      
+      const response = await this.octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        body
+      });
+      
+      // Invalidate cache for this issue's comments
+      const cacheKey = await this.cache.generateCacheKey('comments', { 
+        owner, repo, issueNumber 
+      });
+      this.cache.delete(cacheKey);
+      
+      console.log(chalk.green(`✓ Comment created on issue #${issueNumber}`));
+      return response.data;
+    } catch (error) {
+      const context = { operation: 'createIssueComment', owner, repo, issueNumber };
+      await this.errorHandler.handleApiError(error, context);
+    }
+  }
+
+  async safeGetIssueComments(owner, repo, issueNumber, options = {}) {
+    const context = { operation: 'safeGetIssueComments', owner, repo, issueNumber };
+    
+    return await this.errorHandler.safeExecute(
+      () => this.getIssueComments(owner, repo, issueNumber, options),
       context,
       [] // fallback to empty array if all retries fail
     );

@@ -199,6 +199,31 @@ export class ConfigManager {
     };
   }
 
+  getCommentsConfig() {
+    return this.getConfig().comments || {
+      enabled: true,
+      limit: 50,
+      sort: 'created',
+      direction: 'asc',
+      since: null,
+      include_metadata: true,
+      timestamp_format: 'YYYY-MM-DD HH:mm:ss'
+    };
+  }
+
+  getImagesConfig() {
+    return this.getConfig().images || {
+      enabled: true,
+      download_enabled: true,
+      analyze_enabled: true,
+      output_analysis: true,
+      download_directory: './downloaded_images',
+      max_file_size: 10,
+      cleanup_after_hours: 168,
+      supported_formats: ['png', 'jpg', 'jpeg', 'gif', 'webp']
+    };
+  }
+
   getRepositoryConfig(owner, repo) {
     const repository = this.getRepositories().find(r => 
       r.owner === owner && r.repo === repo

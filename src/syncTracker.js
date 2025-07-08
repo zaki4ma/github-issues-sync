@@ -51,7 +51,21 @@ export class SyncTracker {
       updated_at: issue.updated_at,
       labels: issue.labels?.map(l => l.name).sort(),
       assignees: issue.assignees?.map(a => a.login).sort(),
-      milestone: issue.milestone?.title
+      milestone: issue.milestone?.title,
+      // Include comments in hash calculation for change detection
+      comments: issue.comments?.map(c => ({
+        id: c.id,
+        body: c.body,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+        user: c.user?.login || 'Unknown'
+      })) || [],
+      // Include image processing results in hash calculation
+      imageProcessingResult: issue.imageProcessingResult ? {
+        imageCount: issue.imageProcessingResult.images?.length || 0,
+        imageUrls: issue.imageProcessingResult.images?.map(img => img.originalUrl) || [],
+        analysisCount: issue.imageProcessingResult.analyses?.length || 0
+      } : null
     };
     
     const content = JSON.stringify(relevantData);

@@ -14,17 +14,23 @@ import {
 } from './utils.js';
 import { SyncTracker } from './syncTracker.js';
 import { IssueAnalyzer } from './issueAnalyzer.js';
+import { ImageAnalyzer } from './imageAnalyzer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.join(__dirname, '..');
 
 export class FileManager {
-  constructor(config) {
+  constructor(config, githubClient = null) {
     this.config = config;
     this.templateConfig = config.getTemplateConfig();
     this.outputConfig = config.getOutputConfig();
     this.issueAnalyzer = new IssueAnalyzer();
+    
+    // Image analysis support
+    if (githubClient) {
+      this.imageAnalyzer = new ImageAnalyzer(config, githubClient);
+    }
     
     // Enhanced template support
     this.enhancedTemplate = this.templateConfig.enhanced_issue || './templates/issue-enhanced.md';
@@ -164,7 +170,7 @@ export class FileManager {
   async writeIssueFile(issue, filePath) {
     try {
       // Choose template based on configuration and issue complexity
-      const processedIssue = this.processIssueData(issue);
+      const processedIssue = await this.processIssueData(issue);
       let templatePath = this.templateConfig.issue;
       
       if (this.useEnhancedTemplate && (
@@ -244,7 +250,7 @@ export class FileManager {
     }
   }
 
-  processIssueData(issue) {
+  async processIssueData(issue) {
     // Analyze issue for sub-issues and relationships
     const analyzedIssue = this.issueAnalyzer.analyzeIssue(issue);
     
@@ -254,6 +260,15 @@ export class FileManager {
     const relationshipsMarkdown = this.issueAnalyzer.formatRelationshipsForMarkdown(analyzedIssue.relationships);
     const progressBar = analyzedIssue.progress.total > 0 ? 
       this.issueAnalyzer.generateProgressBar(analyzedIssue.progress.percentage) : '';
+
+    // Process comments if available
+    const processedComments = this.processCommentsData(issue.comments || []);
+
+    // Process images if enabled and available
+    let imageData = { images: [], analyses: [] };
+    if (this.imageAnalyzer && issue.imageProcessingResult) {
+      imageData = issue.imageProcessingResult;
+    }
 
     return {
       ...analyzedIssue,
@@ -272,9 +287,40 @@ export class FileManager {
       relationshipsMarkdown,
       progressBar,
       
+      // Comments data
+      comments: processedComments,
+      
+      // Image data
+      imageData,
+      
       // Summary data
       summary: this.issueAnalyzer.getIssueSummary(analyzedIssue)
     };
+  }
+
+  processCommentsData(comments) {
+    if (!Array.isArray(comments) || comments.length === 0) {
+      return [];
+    }
+
+    const commentsConfig = this.config.getCommentsConfig();
+    
+    return comments.map(comment => ({
+      id: comment.id,
+      user: {
+        login: comment.user?.login || 'Unknown',
+        avatar_url: comment.user?.avatar_url || null,
+        html_url: comment.user?.html_url || null
+      },
+      body: comment.body || '',
+      created_at: formatDate(comment.created_at),
+      updated_at: formatDate(comment.updated_at),
+      updated_at_formatted: comment.created_at !== comment.updated_at ? 
+        formatDate(comment.updated_at) : null,
+      html_url: comment.html_url || null,
+      // Add metadata flag for enhanced display
+      include_metadata: commentsConfig?.include_metadata !== false
+    }));
   }
 
   prepareIndexData(processedIssues) {
@@ -319,7 +365,7 @@ export class FileManager {
         cleanDirectory(outputDir);
       }
       
-      console.log(chalk.green(`✓ Cleaned output directory`));
+      console.log(chalk.green('✓ Cleaned output directory'));
     } catch (error) {
       console.error(chalk.red(`✗ Failed to clean output directory: ${error.message}`));
       throw error;

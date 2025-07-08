@@ -78,6 +78,41 @@ output:
   # Use enhanced template for complex issues
   use_enhanced_template: true
 
+# Comment synchronization settings
+comments:
+  # Enable comment synchronization
+  enabled: true
+  # Maximum number of comments to fetch per issue
+  limit: 50
+  # Comment sorting order
+  sort: "created"        # Options: created, updated
+  direction: "asc"       # Options: asc, desc
+  # Date filtering for comments (ISO format)
+  since: null           # Comments created after this date
+  # Include comment metadata in output
+  include_metadata: true
+  # Format timestamps in comments
+  timestamp_format: "YYYY-MM-DD HH:mm:ss"
+
+# Image analysis settings
+images:
+  # Enable image processing
+  enabled: true
+  # Download images locally
+  download_enabled: true
+  # Analyze images with Claude Code
+  analyze_enabled: true
+  # Output analysis results in markdown
+  output_analysis: true
+  # Directory for downloaded images (relative to project root)
+  download_directory: "./downloaded_images"
+  # Maximum image file size in MB
+  max_file_size: 10
+  # Cleanup old images after N hours (0 = never cleanup)
+  cleanup_after_hours: 168  # 1 week
+  # Supported image formats
+  supported_formats: ["png", "jpg", "jpeg", "gif", "webp"]
+
 # Performance settings
 performance:
   # Number of repositories to process in parallel

@@ -72,7 +72,7 @@ async function syncCommand(options) {
       rateLimitDelay: performanceConfig.rate_limit_delay,
       useCache: true
     });
-    const fileManager = new FileManager(configManager);
+    const fileManager = new FileManager(configManager, githubClient);
     
     spinner.text = 'Testing GitHub connection...';
     const connected = await githubClient.testConnection();
@@ -119,7 +119,7 @@ async function syncCommand(options) {
       await createMasterIndex(repositories, configManager, fileManager);
     }
     
-    console.log(chalk.green(`\\n🎉 Sync completed successfully!`));
+    console.log(chalk.green('\\n🎉 Sync completed successfully!'));
     
   } catch (error) {
     spinner.stop();
@@ -139,7 +139,7 @@ async function statusCommand(options) {
       rateLimitDelay: performanceConfig.rate_limit_delay,
       useCache: true
     });
-    const fileManager = new FileManager(configManager);
+    const fileManager = new FileManager(configManager, githubClient);
     
     spinner.text = 'Checking GitHub connection...';
     const connected = await githubClient.testConnection();
@@ -248,9 +248,77 @@ async function processRepository(repo, options, configManager, githubClient, fil
     const filters = configManager.getFiltersForRepository(repo.owner, repo.repo);
     const issues = await githubClient.safeGetIssues(repo.owner, repo.repo, filters);
     
+    // Check if comments sync is enabled
+    const commentsConfig = configManager.getCommentsConfig();
+    if (commentsConfig.enabled && issues.length > 0) {
+      syncSpinner.text = `Fetching comments for ${issues.length} issues...`;
+      
+      const commentsOptions = {
+        sort: commentsConfig.sort,
+        direction: commentsConfig.direction,
+        since: commentsConfig.since,
+        per_page: Math.min(commentsConfig.limit, 100)
+      };
+      
+      // Fetch comments for each issue
+      for (let i = 0; i < issues.length; i++) {
+        const issue = issues[i];
+        try {
+          syncSpinner.text = `Fetching comments for issue #${issue.number} (${i + 1}/${issues.length})...`;
+          const comments = await githubClient.safeGetIssueComments(
+            repo.owner, 
+            repo.repo, 
+            issue.number, 
+            commentsOptions
+          );
+          
+          // Apply limit if specified
+          const limitedComments = commentsConfig.limit && comments.length > commentsConfig.limit
+            ? comments.slice(0, commentsConfig.limit)
+            : comments;
+          
+          issue.comments = limitedComments;
+        } catch (error) {
+          console.warn(chalk.yellow(`Warning: Failed to fetch comments for issue #${issue.number}: ${error.message}`));
+          issue.comments = [];
+        }
+      }
+      
+      console.log(chalk.gray(`✓ Fetched comments for ${issues.length} issues`));
+    }
+    
+    // Check if image processing is enabled
+    const imagesConfig = configManager.getImagesConfig();
+    if (imagesConfig.enabled && issues.length > 0) {
+      syncSpinner.text = `Processing images for ${issues.length} issues...`;
+      
+      for (let i = 0; i < issues.length; i++) {
+        const issue = issues[i];
+        try {
+          syncSpinner.text = `Processing images for issue #${issue.number} (${i + 1}/${issues.length})...`;
+          
+          // Process images for this issue
+          const imageProcessingResult = await fileManager.imageAnalyzer?.processIssueImages(issue);
+          if (imageProcessingResult) {
+            issue.imageProcessingResult = imageProcessingResult;
+          }
+        } catch (error) {
+          console.warn(chalk.yellow(`Warning: Failed to process images for issue #${issue.number}: ${error.message}`));
+          issue.imageProcessingResult = { images: [], analyses: [] };
+        }
+      }
+      
+      const totalImages = issues.reduce((sum, issue) => sum + (issue.imageProcessingResult?.images?.length || 0), 0);
+      if (totalImages > 0) {
+        console.log(chalk.gray(`✓ Processed ${totalImages} images across ${issues.length} issues`));
+      }
+    }
+    
     if (options.dryRun) {
       syncSpinner.stop();
-      console.log(chalk.yellow(`[DRY RUN] Would sync ${issues.length} issues to ${repo.output_dir}`));
+      const totalComments = issues.reduce((sum, issue) => sum + (issue.comments?.length || 0), 0);
+      const totalImages = issues.reduce((sum, issue) => sum + (issue.imageProcessingResult?.images?.length || 0), 0);
+      console.log(chalk.yellow(`[DRY RUN] Would sync ${issues.length} issues with ${totalComments} comments and ${totalImages} images to ${repo.output_dir}`));
       return { repo, issues: [], success: true };
     }
     
@@ -259,7 +327,8 @@ async function processRepository(repo, options, configManager, githubClient, fil
     const processedIssues = await fileManager.writeIssues(issues, repo, useIncrementalSync);
     
     syncSpinner.stop();
-    console.log(chalk.green(`✓ Successfully synced ${issues.length} issues`));
+    const totalComments = issues.reduce((sum, issue) => sum + (issue.comments?.length || 0), 0);
+    console.log(chalk.green(`✓ Successfully synced ${issues.length} issues with ${totalComments} comments`));
     
     return { repo, issues: processedIssues, success: true };
     
@@ -277,7 +346,7 @@ async function createMasterIndex(repositories, configManager, fileManager) {
     const outputConfig = configManager.getOutputConfig();
     const masterIndexPath = outputConfig.master_index_path;
     
-    let masterContent = `# Projects Overview\\n\\n`;
+    let masterContent = '# Projects Overview\\n\\n';
     masterContent += `**Last Updated:** ${new Date().toISOString()}\\n\\n`;
     
     for (const repo of repositories) {
@@ -300,7 +369,7 @@ async function createMasterIndex(repositories, configManager, fileManager) {
         masterContent += `- **Details:** [View Issues](${indexPath})\\n`;
       }
       
-      masterContent += `\\n`;
+      masterContent += '\\n';
     }
     
     const { safeWriteFile } = await import('./utils.js');

@@ -50,23 +50,23 @@ export class ErrorHandler {
     let coloredMessage;
 
     switch (level) {
-      case 'debug':
-        coloredMessage = chalk.gray(`[${timestamp}] DEBUG: ${message}`);
-        break;
-      case 'info':
-        coloredMessage = chalk.blue(`[${timestamp}] INFO: ${message}`);
-        break;
-      case 'warn':
-        coloredMessage = chalk.yellow(`[${timestamp}] WARN: ${message}`);
-        break;
-      case 'error':
-        coloredMessage = chalk.red(`[${timestamp}] ERROR: ${message}`);
-        if (error) {
-          coloredMessage += `\\n${chalk.red(error.stack || error.message)}`;
-        }
-        break;
-      default:
-        coloredMessage = `[${timestamp}] ${level.toUpperCase()}: ${message}`;
+    case 'debug':
+      coloredMessage = chalk.gray(`[${timestamp}] DEBUG: ${message}`);
+      break;
+    case 'info':
+      coloredMessage = chalk.blue(`[${timestamp}] INFO: ${message}`);
+      break;
+    case 'warn':
+      coloredMessage = chalk.yellow(`[${timestamp}] WARN: ${message}`);
+      break;
+    case 'error':
+      coloredMessage = chalk.red(`[${timestamp}] ERROR: ${message}`);
+      if (error) {
+        coloredMessage += `\\n${chalk.red(error.stack || error.message)}`;
+      }
+      break;
+    default:
+      coloredMessage = `[${timestamp}] ${level.toUpperCase()}: ${message}`;
     }
 
     console.log(coloredMessage);
@@ -133,46 +133,46 @@ export class ErrorHandler {
     };
 
     switch (error.status) {
-      case 401:
-        this.log('error', 'Authentication failed - check your GitHub token', error, context);
-        throw new Error('GitHub authentication failed. Please check your token and permissions.');
+    case 401:
+      this.log('error', 'Authentication failed - check your GitHub token', error, context);
+      throw new Error('GitHub authentication failed. Please check your token and permissions.');
         
-      case 403:
-        if (error.message.includes('rate limit')) {
-          this.log('warn', 'Rate limit exceeded, waiting before retry', error, context);
-          const resetTime = error.response?.headers?.['x-ratelimit-reset'];
-          if (resetTime) {
-            const waitTime = (parseInt(resetTime) * 1000) - Date.now();
-            if (waitTime > 0 && waitTime < 3600000) { // Max 1 hour wait
-              await new Promise(resolve => setTimeout(resolve, waitTime));
-              return; // Allow retry
-            }
+    case 403:
+      if (error.message.includes('rate limit')) {
+        this.log('warn', 'Rate limit exceeded, waiting before retry', error, context);
+        const resetTime = error.response?.headers?.['x-ratelimit-reset'];
+        if (resetTime) {
+          const waitTime = (parseInt(resetTime) * 1000) - Date.now();
+          if (waitTime > 0 && waitTime < 3600000) { // Max 1 hour wait
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            return; // Allow retry
           }
         }
-        this.log('error', 'GitHub API access forbidden', error, context);
-        throw new Error('GitHub API access forbidden. Check your token permissions.');
+      }
+      this.log('error', 'GitHub API access forbidden', error, context);
+      throw new Error('GitHub API access forbidden. Check your token permissions.');
         
-      case 404:
-        this.log('error', 'Repository or resource not found', error, context);
-        throw new Error(`Repository or resource not found: ${context.owner}/${context.repo}`);
+    case 404:
+      this.log('error', 'Repository or resource not found', error, context);
+      throw new Error(`Repository or resource not found: ${context.owner}/${context.repo}`);
         
-      case 422:
-        this.log('error', 'Invalid request parameters', error, context);
-        throw new Error('Invalid request parameters. Check your configuration.');
+    case 422:
+      this.log('error', 'Invalid request parameters', error, context);
+      throw new Error('Invalid request parameters. Check your configuration.');
         
-      case 429:
-        this.log('warn', 'Rate limit exceeded', error, context);
-        // This will be handled by retry logic
+    case 429:
+      this.log('warn', 'Rate limit exceeded', error, context);
+      // This will be handled by retry logic
+      throw error;
+        
+    default:
+      if (this.isRetryableError(error)) {
+        this.log('warn', 'Retryable error occurred', error, context);
         throw error;
-        
-      default:
-        if (this.isRetryableError(error)) {
-          this.log('warn', 'Retryable error occurred', error, context);
-          throw error;
-        } else {
-          this.log('error', 'Non-retryable error occurred', error, context);
-          throw new Error(`GitHub API error: ${error.message}`);
-        }
+      } else {
+        this.log('error', 'Non-retryable error occurred', error, context);
+        throw new Error(`GitHub API error: ${error.message}`);
+      }
     }
   }
 

@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 export function createSlug(title) {
+  if (!title || typeof title !== 'string') {
+    return 'issue';
+  }
+  
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -20,7 +24,11 @@ export function ensureDirectoryExists(dirPath) {
 }
 
 export function generateFilename(issue) {
-  const slug = createSlug(issue.title);
+  if (!issue || !issue.number) {
+    return 'unknown-issue.md';
+  }
+  
+  const slug = createSlug(issue.title || 'untitled');
   return `${issue.number}-${slug}.md`;
 }
 
