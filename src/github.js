@@ -83,7 +83,7 @@ export class GitHubClient {
         const params = {
           owner,
           repo,
-          state,
+          state: state === 'all' ? 'all' : state,
           sort,
           direction,
           per_page
@@ -97,6 +97,7 @@ export class GitHubClient {
           params.assignee = assignee;
         }
 
+        console.log(chalk.gray(`API params: ${JSON.stringify(params)}`));
         const response = await this.octokit.rest.issues.listForRepo(params);
         
         // Filter out pull requests (GitHub API returns both issues and PRs)

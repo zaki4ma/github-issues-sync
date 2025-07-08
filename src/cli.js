@@ -25,6 +25,8 @@ program
   .option('--no-parallel', 'Process repositories sequentially')
   .option('--incremental', 'Use incremental sync (default: true)')
   .option('--no-incremental', 'Force full sync, ignore previous sync data')
+  .option('--force-reorganize', 'Force reorganization of files by current issue state')
+  .option('--no-cache', 'Disable caching and fetch fresh data from GitHub')
   .option('--dry-run', 'Show what would be synced without actually syncing')
   .action(async (options) => {
     try {
@@ -42,6 +44,23 @@ program
   .action(async (options) => {
     try {
       await statusCommand(options);
+    } catch (error) {
+      console.error(chalk.red(`Error: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('reorganize')
+  .description('Reorganize existing files by current issue state')
+  .option('-c, --config <path>', 'Path to config file', './config.yml')
+  .option('-p, --project <name>', 'Reorganize specific project only')
+  .option('-g, --group <name>', 'Reorganize specific repository group only')
+  .option('--no-cache', 'Disable caching and fetch fresh data from GitHub')
+  .option('--dry-run', 'Show what would be moved without actually moving files')
+  .action(async (options) => {
+    try {
+      await reorganizeCommand(options);
     } catch (error) {
       console.error(chalk.red(`Error: ${error.message}`));
       process.exit(1);
@@ -70,7 +89,7 @@ async function syncCommand(options) {
     const performanceConfig = configManager.getPerformanceConfig();
     const githubClient = new GitHubClient(configManager.getGitHubToken(), {
       rateLimitDelay: performanceConfig.rate_limit_delay,
-      useCache: true
+      useCache: options.cache !== false
     });
     const fileManager = new FileManager(configManager, githubClient);
     
@@ -137,7 +156,7 @@ async function statusCommand(options) {
     const performanceConfig = configManager.getPerformanceConfig();
     const githubClient = new GitHubClient(configManager.getGitHubToken(), {
       rateLimitDelay: performanceConfig.rate_limit_delay,
-      useCache: true
+      useCache: options.cache !== false
     });
     const fileManager = new FileManager(configManager, githubClient);
     
@@ -183,6 +202,83 @@ async function statusCommand(options) {
       console.log(chalk.blue(`🔄 GitHub API Rate Limit: ${rateLimit.remaining}/${rateLimit.limit}`));
       console.log(chalk.blue(`   Reset time: ${new Date(rateLimit.reset * 1000).toLocaleString()}`));
     }
+    
+  } catch (error) {
+    spinner.stop();
+    throw error;
+  }
+}
+
+async function reorganizeCommand(options) {
+  const spinner = ora('Loading configuration...').start();
+  
+  try {
+    const configManager = new ConfigManager();
+    configManager.loadConfig(options.config);
+    
+    const performanceConfig = configManager.getPerformanceConfig();
+    const githubClient = new GitHubClient(configManager.getGitHubToken(), {
+      rateLimitDelay: performanceConfig.rate_limit_delay,
+      useCache: options.cache !== false
+    });
+    const fileManager = new FileManager(configManager, githubClient);
+    
+    spinner.text = 'Testing GitHub connection...';
+    const connected = await githubClient.testConnection();
+    if (!connected) {
+      throw new Error('Failed to connect to GitHub');
+    }
+    
+    let repositories = configManager.getRepositories();
+    
+    if (options.project) {
+      const filteredRepos = repositories.filter(repo => 
+        repo.repo === options.project || `${repo.owner}/${repo.repo}` === options.project
+      );
+      
+      if (filteredRepos.length === 0) {
+        throw new Error(`Project '${options.project}' not found in configuration`);
+      }
+      
+      repositories = filteredRepos;
+    } else if (options.group) {
+      try {
+        repositories = configManager.getRepositoriesByGroup(options.group);
+        console.log(chalk.blue(`Processing repository group: ${options.group}`));
+      } catch (error) {
+        throw new Error(`Repository group error: ${error.message}`);
+      }
+    }
+    
+    spinner.stop();
+    
+    console.log(chalk.blue(`\\n🗂️ Reorganizing ${repositories.length} repositories by current issue state...`));
+    
+    let totalMoved = 0;
+    
+    for (const repo of repositories) {
+      console.log(chalk.blue(`\\n📁 Processing ${repo.display_name || repo.owner + '/' + repo.repo}...`));
+      
+      const reorgSpinner = ora('Fetching current issue states...').start();
+      
+      try {
+        const filters = configManager.getFiltersForRepository(repo.owner, repo.repo);
+        const issues = await githubClient.safeGetIssues(repo.owner, repo.repo, filters);
+        
+        reorgSpinner.text = 'Analyzing file organization...';
+        const moved = await fileManager.reorganizeFilesByState(issues, repo, options.dryRun);
+        totalMoved += moved;
+        
+        reorgSpinner.stop();
+        console.log(chalk.green(`✓ ${options.dryRun ? 'Would move' : 'Moved'} ${moved} files`));
+        
+      } catch (error) {
+        reorgSpinner.stop();
+        console.error(chalk.red(`✗ Failed to reorganize ${repo.owner}/${repo.repo}: ${error.message}`));
+      }
+    }
+    
+    console.log(chalk.green(`\\n🎉 Reorganization completed! ${options.dryRun ? 'Would move' : 'Moved'} ${totalMoved} files total.`));
     
   } catch (error) {
     spinner.stop();
@@ -324,6 +420,13 @@ async function processRepository(repo, options, configManager, githubClient, fil
     
     syncSpinner.text = 'Writing files...';
     const useIncrementalSync = options.incremental !== false;
+    
+    // Force reorganization if requested
+    if (options.forceReorganize) {
+      syncSpinner.text = 'Reorganizing files by current state...';
+      await fileManager.reorganizeFilesByState(issues, repo, false);
+    }
+    
     const processedIssues = await fileManager.writeIssues(issues, repo, useIncrementalSync);
     
     syncSpinner.stop();

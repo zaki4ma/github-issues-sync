@@ -141,6 +141,19 @@ export class CacheManager {
     }
   }
 
+  clear() {
+    try {
+      const files = fs.readdirSync(this.cacheDir).filter(file => file.endsWith('.json'));
+      files.forEach(file => {
+        const filePath = path.join(this.cacheDir, file);
+        fs.unlinkSync(filePath);
+      });
+      console.log(`Cleared ${files.length} cache entries`);
+    } catch (error) {
+      console.warn(`Warning: Failed to clear cache: ${error.message}`);
+    }
+  }
+
   getStats() {
     try {
       const files = fs.readdirSync(this.cacheDir).filter(file => file.endsWith('.json'));

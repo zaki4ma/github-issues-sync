@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm install:*)",
+      "Bash(chmod:*)",
+      "Bash(npm run start:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(node:*)",
+      "Bash(rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(grep:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:*)",
+      "Bash(npm start sync:*)",
+      "Bash(true)"
+    ],
+    "deny": []
+  }
+}

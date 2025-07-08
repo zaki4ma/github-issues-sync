@@ -8,6 +8,8 @@ GitHubのプライベートリポジトリからIssuesを取得し、ローカ�
 
 - 🔄 GitHubリポジトリからIssuesを自動同期
 - 📁 Issues を状態別（Active/Todo/Done/Blocked）にディレクトリ分けして整理
+- 🗂️ **自動Issue状態管理** - GitHub上の状態変更に応じた自動ファイル移動
+- 🎯 **Claude Code最適化** - 未完了タスクのみを`todo`フォルダに整理してモチベーション維持
 - 💬 **コメント同期** - Issue・コメントを完全同期
 - 🖼️ **画像分析機能** - GitHub画像URLの自動検出・情報表示
 - 🎯 **Sub-issues対応** - タスクリスト、関係性、進捗管理
@@ -107,8 +109,20 @@ npm run start sync --parallel
 # フル同期（増分同期を無効）
 npm run start sync --no-incremental
 
+# キャッシュ無効化（最新データを強制取得）
+npm run start sync --no-cache
+
+# 強制的な状態別ファイル再整理
+npm run start sync --force-reorganize
+
 # ドライラン（実際の同期はしない）
 npm run start sync --dry-run
+
+# ファイル整理のみ実行
+npm run start reorganize
+
+# ファイル整理のドライラン
+npm run start reorganize --dry-run
 ```
 
 ## 設定ファイル詳細
@@ -147,6 +161,9 @@ output:
   group_by_state: true               # 状態別ディレクトリ分け
   create_index: true                 # インデックスファイル作成
   use_enhanced_template: true        # 拡張テンプレート使用
+  auto_reorganize: true              # Issue状態変更時の自動ファイル移動
+  create_master_index: false         # マスターインデックス作成
+  master_index_path: "./docs/master-index.md"
 ```
 
 ### コメント同期設定
@@ -217,6 +234,126 @@ docs/issues/
 ```
 
 ## 主要機能詳細
+
+### 🗂️ 自動Issue状態管理機能
+
+GitHub上でIssueの状態が変更された際に、ローカルファイルを適切なフォルダに自動移動する機能です。
+
+#### 🎯 主な特徴
+
+- **自動ファイル移動**: GitHub上でIssueを完了済み（Closed）にマークすると、次回同期時に`todo`フォルダから`done`フォルダに自動移動
+- **Claude Code最適化**: `todo`フォルダには未完了のIssueのみが残るため、Claude Codeでのタスク管理がより効率的
+- **状態別分類**: Issues を以下の4つの状態に自動分類
+  - `todo/` - 未着手のIssues（open状態）
+  - `active/` - 作業中のIssues（"in progress"や"active"ラベル付き）
+  - `done/` - 完了済みIssues（closed状態）
+  - `blocked/` - ブロック中のIssues（"blocked"ラベル付き）
+
+#### 📁 フォルダ構造の例
+
+```
+docs/issues/
+├── index.md              # Issues概要（状態別サマリー付き）
+├── todo/                 # 未完了タスク（Claude Codeが参照）
+│   ├── 124-bug-fix.md
+│   └── 125-enhancement.md
+├── done/                 # 完了済みタスク
+│   ├── 122-completed.md
+│   └── 123-released.md
+├── active/               # 作業中
+│   └── 126-in-progress.md
+└── blocked/              # ブロック中
+    └── 127-waiting.md
+```
+
+#### 🚀 使用方法
+
+##### 基本的な同期（自動移動有効）
+```bash
+# GitHub上でIssueをClosedにマークした後、通常通り同期
+npm run start sync
+
+# 状態変更を強制的に反映
+npm run start sync --force-reorganize
+```
+
+##### 手動でのファイル整理
+```bash
+# 現在のGitHub Issue状態に基づいてファイルを再整理
+npm run start reorganize
+
+# ドライラン（実際の移動はせず、移動予定を表示）
+npm run start reorganize --dry-run
+
+# 特定プロジェクトのみ整理
+npm run start reorganize --project my-repo
+```
+
+#### ⚙️ 設定オプション
+
+```yaml
+# config.yml
+output:
+  group_by_state: true      # 状態別フォルダ分けを有効化
+  auto_reorganize: true     # 自動ファイル移動を有効化
+  
+filters:
+  states: ["all"]           # open と closed 両方を取得（重要！）
+```
+
+> **重要**: `states: ["all"]` または `states: ["open", "closed"]` の設定が必要です。`states: ["open"]` のままでは完了済みIssueが取得されず、自動移動機能が動作しません。
+
+#### 🎨 インデックスファイルの改善
+
+状態管理機能により、インデックスファイルは以下のように改善されます：
+
+```markdown
+# Issues Overview
+
+**Last Updated:** 2025-07-08T22:01:41.143Z  
+**Total Issues:** 11
+
+## Todo Issues (3)
+- [#4 簡易的な管理画面が欲しい](./todo/4-issue.md)
+- [#8 カレンダーから行ける日次レポート改善](./todo/8-issue.md)
+- [#10 今日のチェックインについて](./todo/10-issue.md)
+
+## Recently Completed (8)
+- [#1 記録の時、サブカテゴリで内容選択の改善](./done/1-issue.md) - Closed: 2025-01-15
+- [#2 記録ボタンを大きく画面下に固定](./done/2-issue.md) - Closed: 2025-01-14
+- [#3 記録後の画面リセット](./done/3-issue.md) - Closed: 2025-01-13
+...
+```
+
+#### 🔧 トラブルシューティング
+
+**Q: Issue を完了済みにしたのに `todo` フォルダに残っている**
+
+A: 以下を確認してください：
+
+1. 設定で `states: ["all"]` になっているか
+2. キャッシュをクリアして最新データを取得
+3. 手動でファイル整理を実行
+
+```bash
+# 1. キャッシュクリア + 最新データ取得
+npm run start sync --no-cache
+
+# 2. 手動整理
+npm run start reorganize
+
+# 3. 設定確認
+cat config.yml | grep -A 2 "filters:"
+```
+
+**Q: 自動移動機能を無効にしたい**
+
+A: 設定で無効化できます：
+
+```yaml
+output:
+  auto_reorganize: false    # 自動移動を無効化
+```
 
 ### 💬 コメント同期機能
 

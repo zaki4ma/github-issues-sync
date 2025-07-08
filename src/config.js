@@ -238,7 +238,24 @@ export class ConfigManager {
 
   getFiltersForRepository(owner, repo) {
     const repository = this.getRepositoryConfig(owner, repo);
-    return repository.filters || this.getGlobalFilters();
+    const filters = repository.filters || this.getGlobalFilters();
+    
+    // Convert states array to single state value for GitHub API
+    if (filters.states && Array.isArray(filters.states)) {
+      if (filters.states.includes('all') || 
+          (filters.states.includes('open') && filters.states.includes('closed'))) {
+        filters.state = 'all';
+      } else if (filters.states.includes('open')) {
+        filters.state = 'open';
+      } else if (filters.states.includes('closed')) {
+        filters.state = 'closed';
+      } else {
+        filters.state = 'open'; // default
+      }
+      delete filters.states; // Remove the array version
+    }
+    
+    return filters;
   }
 
   createDefaultConfig() {

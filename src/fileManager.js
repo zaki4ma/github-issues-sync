@@ -124,6 +124,11 @@ export class FileManager {
         const filename = generateFilename(issue);
         const filePath = path.join(stateDir, filename);
         
+        // Check if issue has changed state and needs to be moved
+        if (syncTracker && this.outputConfig.auto_reorganize !== false) {
+          await this.handleIssueStateChange(issue, outputDir, syncTracker);
+        }
+        
         await this.writeIssueFile(issue, filePath);
         
         if (syncTracker) {
@@ -384,6 +389,149 @@ export class FileManager {
       return true;
     } catch (error) {
       throw new Error(`Output directory is not writable: ${error.message}`);
+    }
+  }
+
+  async handleIssueStateChange(issue, outputDir, syncTracker) {
+    try {
+      const currentState = this.categorizeIssue(issue);
+      const filename = generateFilename(issue);
+      const currentPath = path.join(outputDir, currentState, filename);
+      
+      // Get previous state from sync tracker
+      const previousIssueData = syncTracker.getSyncData().issues.find(i => i.id === issue.id);
+      if (!previousIssueData) {
+        return; // New issue, no need to move
+      }
+      
+      const previousState = this.categorizeIssueFromPath(previousIssueData.filePath);
+      
+      if (previousState && previousState !== currentState) {
+        const previousPath = previousIssueData.filePath;
+        
+        // Move file from previous state directory to current state directory
+        if (fs.existsSync(previousPath)) {
+          // Ensure target directory exists
+          const targetDir = path.join(outputDir, currentState);
+          ensureDirectoryExists(targetDir);
+          
+          // Move the file
+          fs.renameSync(previousPath, currentPath);
+          console.log(chalk.blue(`📁 Moved issue #${issue.number} from ${previousState} to ${currentState}`));
+          
+          // Clean up empty directories if needed
+          await this.cleanupEmptyDirectory(path.dirname(previousPath));
+        }
+      }
+    } catch (error) {
+      console.warn(chalk.yellow(`⚠️ Failed to handle state change for issue #${issue.number}: ${error.message}`));
+    }
+  }
+
+  categorizeIssueFromPath(filePath) {
+    const pathParts = filePath.split(path.sep);
+    const stateFolder = pathParts[pathParts.length - 2]; // Get parent directory name
+    
+    // Map folder names to state categories
+    const folderToState = {
+      'todo': 'todo',
+      'active': 'active', 
+      'done': 'done',
+      'blocked': 'blocked'
+    };
+    
+    return folderToState[stateFolder] || null;
+  }
+
+  async cleanupEmptyDirectory(dirPath) {
+    try {
+      if (fs.existsSync(dirPath)) {
+        const files = fs.readdirSync(dirPath);
+        if (files.length === 0) {
+          fs.rmdirSync(dirPath);
+          console.log(chalk.gray(`🗑️ Removed empty directory: ${dirPath}`));
+        }
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  }
+
+  async reorganizeFilesByState(issues, repositoryConfig, dryRun = false) {
+    try {
+      const outputDir = path.resolve(repositoryConfig.output_dir);
+      let movedCount = 0;
+      
+      if (!this.outputConfig.group_by_state) {
+        console.log(chalk.yellow('Reorganization skipped: group_by_state is disabled'));
+        return 0;
+      }
+      
+      // Create issue map for quick lookup
+      const issueMap = new Map();
+      issues.forEach(issue => {
+        issueMap.set(issue.number, issue);
+      });
+      
+      // Scan all state directories for existing files
+      const stateDirectories = ['active', 'todo', 'done', 'blocked'];
+      
+      for (const currentStateDir of stateDirectories) {
+        const stateDirPath = path.join(outputDir, currentStateDir);
+        
+        if (!fs.existsSync(stateDirPath)) continue;
+        
+        const files = fs.readdirSync(stateDirPath).filter(file => file.endsWith('.md'));
+        
+        for (const filename of files) {
+          try {
+            // Extract issue number from filename (e.g., "2-issue.md" -> 2)
+            const issueNumberMatch = filename.match(/^(\d+)-/);
+            if (!issueNumberMatch) continue;
+            
+            const issueNumber = parseInt(issueNumberMatch[1]);
+            const issue = issueMap.get(issueNumber);
+            
+            if (!issue) {
+              console.log(chalk.gray(`⚠️ Issue #${issueNumber} no longer exists, keeping in ${currentStateDir}`));
+              continue;
+            }
+            
+            const expectedState = this.categorizeIssue(issue);
+            
+            if (currentStateDir !== expectedState) {
+              const currentPath = path.join(stateDirPath, filename);
+              const targetDir = path.join(outputDir, expectedState);
+              const targetPath = path.join(targetDir, filename);
+              
+              if (dryRun) {
+                console.log(chalk.blue(`📁 Would move: ${filename} from ${currentStateDir} to ${expectedState}`));
+              } else {
+                // Ensure target directory exists
+                ensureDirectoryExists(targetDir);
+                
+                // Move the file
+                fs.renameSync(currentPath, targetPath);
+                console.log(chalk.blue(`📁 Moved: ${filename} from ${currentStateDir} to ${expectedState}`));
+              }
+              
+              movedCount++;
+            }
+          } catch (error) {
+            console.warn(chalk.yellow(`⚠️ Failed to process file ${filename}: ${error.message}`));
+          }
+        }
+        
+        // Clean up empty directories after moving files
+        if (!dryRun) {
+          await this.cleanupEmptyDirectory(stateDirPath);
+        }
+      }
+      
+      return movedCount;
+    } catch (error) {
+      console.error(chalk.red(`✗ Failed to reorganize files: ${error.message}`));
+      throw error;
     }
   }
 
