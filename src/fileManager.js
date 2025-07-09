@@ -47,7 +47,7 @@ export class FileManager {
       let syncStats = null;
 
       if (useIncrementalSync) {
-        syncStats = this.performIncrementalSync(issues, syncTracker);
+        syncStats = await this.performIncrementalSync(issues, syncTracker, outputDir);
         issuesToProcess = [...syncStats.new, ...syncStats.updated];
         
         if (syncStats.total === 0) {
@@ -90,7 +90,7 @@ export class FileManager {
     }
   }
 
-  performIncrementalSync(issues, syncTracker) {
+  async performIncrementalSync(issues, syncTracker, outputDir) {
     const changes = syncTracker.getChangedIssues(issues);
     
     // Clean up deleted issues
@@ -98,6 +98,56 @@ export class FileManager {
       const cleanedFiles = syncTracker.cleanupDeletedIssues(changes.deleted);
       if (cleanedFiles.length > 0) {
         console.log(chalk.yellow(`Cleaned up ${cleanedFiles.length} deleted issue files`));
+      }
+    }
+    
+    // Handle state changes for all issues when auto_reorganize is enabled
+    if (this.outputConfig.group_by_state && this.outputConfig.auto_reorganize !== false) {
+      const allIssues = [...changes.new, ...changes.updated, ...changes.unchanged];
+      let movedCount = 0;
+      
+      console.log(chalk.gray(`Checking state changes for ${allIssues.length} issues...`));
+      
+      for (const issue of allIssues) {
+        const syncData = syncTracker.getIssueData(issue.number);
+        if (syncData && syncData.filePath) {
+          const currentState = this.categorizeIssue(issue);
+          const previousState = this.categorizeIssueFromPath(syncData.filePath);
+          
+          // Debug logging (disabled for production)
+          // console.log(chalk.gray(`Issue #${issue.number}: filePath=${syncData.filePath}, previousState=${previousState}, currentState=${currentState}`));
+          
+          if (issue.state === 'closed' && previousState !== 'done') {
+            console.log(chalk.gray(`Issue #${issue.number}: closed but in ${previousState} folder`));
+          }
+          
+          if (previousState && currentState !== previousState) {
+            try {
+              const previousPath = syncData.filePath;
+              const filename = path.basename(previousPath);
+              const newDir = path.join(outputDir, currentState);
+              const newPath = path.join(newDir, filename);
+              
+              if (fs.existsSync(previousPath)) {
+                ensureDirectoryExists(newDir);
+                fs.renameSync(previousPath, newPath);
+                console.log(chalk.blue(`📁 Moved issue #${issue.number} from ${previousState} to ${currentState}`));
+                movedCount++;
+                
+                // Clean up empty directory
+                await this.cleanupEmptyDirectory(path.dirname(previousPath));
+              } else {
+                console.log(chalk.yellow(`⚠️ File not found for issue #${issue.number}: ${previousPath}`));
+              }
+            } catch (error) {
+              console.warn(chalk.yellow(`⚠️ Failed to move issue #${issue.number}: ${error.message}`));
+            }
+          }
+        }
+      }
+      
+      if (movedCount > 0) {
+        console.log(chalk.green(`✓ Automatically reorganized ${movedCount} issues by state`));
       }
     }
     
@@ -399,9 +449,9 @@ export class FileManager {
       const currentPath = path.join(outputDir, currentState, filename);
       
       // Get previous state from sync tracker
-      const previousIssueData = syncTracker.getSyncData().issues.find(i => i.id === issue.id);
-      if (!previousIssueData) {
-        return; // New issue, no need to move
+      const previousIssueData = syncTracker.getIssueData(issue.number);
+      if (!previousIssueData || !previousIssueData.filePath) {
+        return; // New issue or no previous file path, no need to move
       }
       
       const previousState = this.categorizeIssueFromPath(previousIssueData.filePath);

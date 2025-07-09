@@ -180,6 +180,10 @@ export class SyncTracker {
     };
   }
 
+  getIssueData(issueNumber) {
+    return this.syncData.issues[issueNumber.toString()] || null;
+  }
+
   reset() {
     this.syncData = {
       lastSync: null,
