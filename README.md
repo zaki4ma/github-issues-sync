@@ -94,35 +94,55 @@ npm run start init
 npm run start --help
 ```
 
+### ⚠️ 重要：NPMスクリプトでの引数渡し
+
+NPMスクリプト経由でオプションを渡す場合は、`--`（二重ダッシュ）が必要です：
+
+```bash
+# ❌ 間違った方法（オプションが無視される）
+npm run start sync --project my-repo
+
+# ✅ 正しい方法（二重ダッシュを使用）
+npm run start -- sync --project my-repo
+
+# ✅ 直接実行（推奨）
+node src/cli.js sync --project my-repo
+```
+
+詳しくは[高度なオプション](#高度なオプション)を参照してください。
+
 ### 高度なオプション
 
 ```bash
 # 特定プロジェクトのみ同期
-npm run start sync --project my-repo
+npm run start -- sync --project my-repo
+
+# または直接実行
+node src/cli.js sync --project my-repo
 
 # リポジトリグループでの同期
-npm run start sync --group personal
+npm run start -- sync --group personal
 
 # 並列処理での高速同期
-npm run start sync --parallel
+npm run start -- sync --parallel
 
 # フル同期（増分同期を無効）
-npm run start sync --no-incremental
+npm run start -- sync --no-incremental
 
 # キャッシュ無効化（最新データを強制取得）
-npm run start sync --no-cache
+npm run start -- sync --no-cache
 
 # 強制的な状態別ファイル再整理
-npm run start sync --force-reorganize
+npm run start -- sync --force-reorganize
 
 # ドライラン（実際の同期はしない）
-npm run start sync --dry-run
+npm run start -- sync --dry-run
 
 # ファイル整理のみ実行
-npm run start reorganize
+npm run start -- reorganize
 
 # ファイル整理のドライラン
-npm run start reorganize --dry-run
+npm run start -- reorganize --dry-run
 ```
 
 ## 設定ファイル詳細
@@ -274,19 +294,19 @@ docs/issues/
 npm run start sync
 
 # 状態変更を強制的に反映
-npm run start sync --force-reorganize
+npm run start -- sync --force-reorganize
 ```
 
 ##### 手動でのファイル整理
 ```bash
 # 現在のGitHub Issue状態に基づいてファイルを再整理
-npm run start reorganize
+npm run start -- reorganize
 
 # ドライラン（実際の移動はせず、移動予定を表示）
-npm run start reorganize --dry-run
+npm run start -- reorganize --dry-run
 
 # 特定プロジェクトのみ整理
-npm run start reorganize --project my-repo
+npm run start -- reorganize --project my-repo
 ```
 
 #### ⚙️ 設定オプション
@@ -337,10 +357,10 @@ A: 以下を確認してください：
 
 ```bash
 # 1. キャッシュクリア + 最新データ取得
-npm run start sync --no-cache
+npm run start -- sync --no-cache
 
 # 2. 手動整理
-npm run start reorganize
+npm run start -- reorganize
 
 # 3. 設定確認
 cat config.yml | grep -A 2 "filters:"
@@ -384,7 +404,7 @@ output:
 npm run start sync
 
 # 問題が発生した場合のリセット手順
-npm run start sync --no-incremental
+npm run start -- sync --no-incremental
 ```
 
 ### 💬 コメント同期機能
@@ -504,7 +524,7 @@ filters:
 **A:** 並列処理とキャッシュを活用：
 
 ```bash
-npm run start sync --parallel
+npm run start -- sync --parallel
 ```
 
 ### Q: エラーが発生する
